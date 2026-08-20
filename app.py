@@ -248,6 +248,30 @@ def render_about_page() -> None:
         )
     st.divider()
     st.success("Ваш день не обязан быть идеальным. Достаточно сделать следующий хороший шаг.")
+    st.divider()
+    st.subheader("Контакты")
+    contact_telegram, contact_github = st.columns(2)
+    with contact_telegram:
+        st.markdown(
+            "<a href='https://t.me/pavelkozlov_ae' target='_blank' "
+            "style='text-decoration:none; font-size:1.05rem; display:flex; "
+            "align-items:center; gap:.5rem;'>"
+            "<svg width='28' height='28' viewBox='0 0 28 28' aria-label='Telegram' "
+            "role='img'><circle cx='14' cy='14' r='14' fill='#229ED9'/>"
+            "<path d='M21 7.5 17.8 21c-.24.95-.78 1.18-1.58.74l-4.34-3.2-2.1 2.02c-.23.23-.42.42-.86.42l.31-4.42 8.04-7.26c.35-.31-.08-.48-.55-.17L6.78 15.8l-4.3-1.35c-.94-.3-.96-.94.2-1.4L19.5 7.1c.78-.29 1.47.18 1.5.4Z' fill='white'/></svg>"
+            "@pavelkozlov_ae</a>",
+            unsafe_allow_html=True,
+        )
+    with contact_github:
+        st.markdown(
+            "<a href='https://github.com/pavel-commits' target='_blank' "
+            "style='text-decoration:none; font-size:1.05rem; display:flex; "
+            "align-items:center; gap:.5rem;'>"
+            "<svg width='28' height='28' viewBox='0 0 24 24' aria-label='GitHub' "
+            "role='img' fill='currentColor'><path d='M12 .3a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.04c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.84 1.23 1.84 1.23 1.07 1.83 2.8 1.3 3.48.99.11-.77.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.23-3.22-.12-.3-.53-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.87.12 3.17.76.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.62-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .3Z'/></svg>"
+            "pavel-commits</a>",
+            unsafe_allow_html=True,
+        )
 
 
 def render_habits_page(habits: list[dict]) -> None:
