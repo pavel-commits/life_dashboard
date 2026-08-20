@@ -110,6 +110,24 @@ def get_habits() -> list[dict[str, Any]]:
         raise DatabaseError("Не удалось загрузить привычки.") from error
 
 
+def create_habit(name: str) -> None:
+    try:
+        with get_connection() as connection:
+            connection.execute("INSERT INTO habits (name) VALUES (?)", (name,))
+            connection.commit()
+    except sqlite3.Error as error:
+        raise DatabaseError("Не удалось сохранить привычку.") from error
+
+
+def delete_habit(habit_id: int) -> None:
+    try:
+        with get_connection() as connection:
+            connection.execute("DELETE FROM habits WHERE id = ?", (habit_id,))
+            connection.commit()
+    except sqlite3.Error as error:
+        raise DatabaseError("Не удалось удалить привычку.") from error
+
+
 def get_recent_notes(limit: int = 5) -> list[dict[str, Any]]:
     try:
         with get_connection() as connection:
@@ -120,6 +138,27 @@ def get_recent_notes(limit: int = 5) -> list[dict[str, Any]]:
         return [dict(row) for row in rows]
     except sqlite3.Error as error:
         raise DatabaseError("Не удалось загрузить заметки.") from error
+
+
+def create_note(title: str, content: str) -> None:
+    try:
+        with get_connection() as connection:
+            connection.execute(
+                "INSERT INTO notes (title, content) VALUES (?, ?)",
+                (title, content),
+            )
+            connection.commit()
+    except sqlite3.Error as error:
+        raise DatabaseError("Не удалось сохранить заметку.") from error
+
+
+def delete_note(note_id: int) -> None:
+    try:
+        with get_connection() as connection:
+            connection.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+            connection.commit()
+    except sqlite3.Error as error:
+        raise DatabaseError("Не удалось удалить заметку.") from error
 
 
 def create_task(

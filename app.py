@@ -5,7 +5,11 @@ import streamlit as st
 
 from database import (
     DatabaseError,
+    create_habit,
+    create_note,
     create_task,
+    delete_habit,
+    delete_note,
     delete_task,
     get_dashboard_stats,
     get_habits,
@@ -195,11 +199,17 @@ def render_task(task: dict) -> None:
 
 
 def render_navigation() -> str:
-    pages = {"Дашборд": "dashboard", "Управление задачами": "tasks", "О себе": "about"}
+    pages = {
+        "Дашборд": "dashboard",
+        "Задачи": "tasks",
+        "Привычки": "habits",
+        "Заметки": "notes",
+        "О себе": "about",
+    }
     if "page" not in st.session_state:
         st.session_state.page = "dashboard"
     st.markdown("<div class='top-nav'></div>", unsafe_allow_html=True)
-    columns = st.columns([1, 1.6, 1, 5])
+    columns = st.columns(5)
     for column, (label, page) in zip(columns, pages.items()):
         with column:
             if st.button(
@@ -238,6 +248,99 @@ def render_about_page() -> None:
         )
     st.divider()
     st.success("Ваш день не обязан быть идеальным. Достаточно сделать следующий хороший шаг.")
+
+
+def render_habits_page(habits: list[dict]) -> None:
+    st.markdown(
+        "<div class='hero'><div><div class='eyebrow'>Ежедневный ритм</div>"
+        "<h1>Привычки.</h1>"
+        "<p>Небольшие повторяющиеся действия, из которых складывается хороший день.</p></div></div>",
+        unsafe_allow_html=True,
+    )
+    left, right = st.columns([1, 2])
+    with left:
+        st.subheader("Добавить привычку")
+        version = st.session_state.get("new_habit_form_version", 0)
+        with st.form(f"new_habit_{version}"):
+            name = st.text_input("Название", max_chars=100)
+            submitted = st.form_submit_button(
+                "Сохранить привычку", type="primary", use_container_width=True
+            )
+        if submitted:
+            if not name.strip():
+                st.error("Укажите название привычки.")
+            else:
+                try:
+                    create_habit(name.strip())
+                except DatabaseError as error:
+                    st.error(str(error))
+                else:
+                    st.session_state.new_habit_form_version = version + 1
+                    st.rerun()
+    with right:
+        st.subheader("Активные привычки")
+        if habits:
+            for habit in habits:
+                item, remove = st.columns([5, 1])
+                with item:
+                    st.markdown(
+                        f"**{habit['name']}**  \nСерия: {habit['streak']} дн."
+                    )
+                with remove:
+                    if st.button("Удалить", key=f"delete_habit_{habit['id']}"):
+                        try:
+                            delete_habit(habit["id"])
+                        except DatabaseError as error:
+                            st.error(str(error))
+                        else:
+                            st.rerun()
+        else:
+            st.info("Привычек пока нет. Добавьте первую слева.")
+
+
+def render_notes_page(notes: list[dict]) -> None:
+    st.markdown(
+        "<div class='hero'><div><div class='eyebrow'>Место для мыслей</div>"
+        "<h1>Заметки.</h1>"
+        "<p>Сохраняйте идеи, наблюдения и всё, к чему хочется вернуться.</p></div></div>",
+        unsafe_allow_html=True,
+    )
+    left, right = st.columns([1, 2])
+    with left:
+        st.subheader("Добавить заметку")
+        version = st.session_state.get("new_note_form_version", 0)
+        with st.form(f"new_note_{version}"):
+            title = st.text_input("Заголовок", max_chars=120)
+            content = st.text_area("Текст", height=150, max_chars=5000)
+            submitted = st.form_submit_button(
+                "Сохранить заметку", type="primary", use_container_width=True
+            )
+        if submitted:
+            if not title.strip():
+                st.error("Укажите заголовок заметки.")
+            else:
+                try:
+                    create_note(title.strip(), content.strip())
+                except DatabaseError as error:
+                    st.error(str(error))
+                else:
+                    st.session_state.new_note_form_version = version + 1
+                    st.rerun()
+    with right:
+        st.subheader("Последние заметки")
+        if notes:
+            for note in notes:
+                with st.expander(note["title"]):
+                    st.write(note["content"] or "Пустая заметка")
+                    if st.button("Удалить", key=f"delete_note_{note['id']}"):
+                        try:
+                            delete_note(note["id"])
+                        except DatabaseError as error:
+                            st.error(str(error))
+                        else:
+                            st.rerun()
+        else:
+            st.info("Заметок пока нет. Добавьте первую слева.")
 
 
 def render_task_management(tasks: list[dict]) -> None:
@@ -298,6 +401,12 @@ except DatabaseError as error:
 page = render_navigation()
 if page == "about":
     render_about_page()
+    st.stop()
+if page == "habits":
+    render_habits_page(habits)
+    st.stop()
+if page == "notes":
+    render_notes_page(recent_notes)
     st.stop()
 if page == "tasks":
     render_task_management(tasks)
