@@ -5,17 +5,24 @@ import streamlit as st
 
 from database import (
     DatabaseError,
+    calculate_goal_progress,
+    create_goal,
     create_habit,
     create_note,
     create_task,
     delete_habit,
     delete_note,
     delete_task,
+    get_goal,
+    get_goal_tasks,
+    get_goals,
     get_dashboard_stats,
     get_habits,
     get_recent_notes,
     get_tasks,
     init_db,
+    link_task_to_goal,
+    update_goal,
     update_task,
 )
 
@@ -26,6 +33,7 @@ CATEGORY_LABELS = {
     "Other": "Другое",
 }
 PRIORITY_LABELS = {"Low": "Низкий", "Medium": "Средний", "High": "Высокий"}
+GOAL_STATUS_LABELS = {"Active": "Активная", "Completed": "Завершена", "Archived": "В архиве"}
 
 
 st.set_page_config(
@@ -145,6 +153,17 @@ def task_form(task: Optional[dict] = None) -> None:
             "Дедлайн", value=parse_due_date(task.get("due_date") if task else None),
             disabled=not has_deadline, key=f"{prefix}_due_date",
         )
+    available_goals = get_goals(active_only=True)
+    goal_options = {None: "Без цели"}
+    goal_options.update({goal["id"]: goal["title"] for goal in available_goals})
+    goal_ids = list(goal_options)
+    selected_goal = st.selectbox(
+        "Цель", list(goal_options.values()),
+        index=goal_ids.index(task.get("goal_id"))
+        if task and task.get("goal_id") in goal_ids else 0,
+        key=f"{prefix}_goal",
+    )
+    goal_id = next(goal_id for goal_id, label in goal_options.items() if label == selected_goal)
     submitted = st.button(
         "Сохранить задачу", type="primary", use_container_width=True, key=f"{prefix}_save"
     )
@@ -156,10 +175,10 @@ def task_form(task: Optional[dict] = None) -> None:
         try:
             if is_editing:
                 update_task(task["id"], title.strip(), description.strip(), priority,
-                            due_value, status, category)
+                            due_value, status, category, goal_id)
             else:
                 create_task(title.strip(), description.strip(), priority, due_value, status,
-                            category)
+                            category, goal_id)
         except DatabaseError as error:
             st.error(str(error))
             return
@@ -202,6 +221,7 @@ def render_navigation() -> str:
     pages = {
         "Дашборд": "dashboard",
         "Задачи": "tasks",
+        "Цели": "goals",
         "Привычки": "habits",
         "Заметки": "notes",
         "О себе": "about",
@@ -209,7 +229,7 @@ def render_navigation() -> str:
     if "page" not in st.session_state:
         st.session_state.page = "dashboard"
     st.markdown("<div class='top-nav'></div>", unsafe_allow_html=True)
-    columns = st.columns(5)
+    columns = st.columns(6)
     for column, (label, page) in zip(columns, pages.items()):
         with column:
             if st.button(
@@ -367,6 +387,85 @@ def render_notes_page(notes: list[dict]) -> None:
             st.info("Заметок пока нет. Добавьте первую слева.")
 
 
+def render_goals_page(goals: list[dict], tasks: list[dict]) -> None:
+    selected_goal_id = st.session_state.get("selected_goal_id")
+    if selected_goal_id:
+        goal = get_goal(selected_goal_id)
+        if not goal:
+            st.session_state.pop("selected_goal_id")
+            st.rerun()
+        if st.button("← Все цели", key="back_to_goals"):
+            st.session_state.pop("selected_goal_id")
+            st.rerun()
+        st.markdown(f"### {goal['title']}")
+        st.write(goal["description"] or "Без описания")
+        progress = calculate_goal_progress(goal["id"])
+        linked_tasks = get_goal_tasks(goal["id"])
+        st.progress(progress / 100, text=f"Прогресс: {progress}%")
+        done_count = sum(task["status"] == "Done" for task in linked_tasks)
+        st.caption(
+            f"Выполнено задач: {done_count} из {len(linked_tasks)} · "
+            f"Дедлайн: {format_due_date(goal['due_date'])}"
+        )
+        st.markdown("#### Связанные задачи")
+        if linked_tasks:
+            for task in linked_tasks:
+                st.write(f"{'✓' if task['status'] == 'Done' else '○'} {task['title']}")
+        else:
+            st.info("К цели пока не привязаны задачи.")
+        linkable = [task for task in tasks if not task.get("goal_id") or task.get("goal_id") == goal["id"]]
+        if linkable:
+            task_options = {task["id"]: task["title"] for task in linkable}
+            selected_task_id = st.selectbox(
+                "Выберите задачу для связи",
+                list(task_options),
+                format_func=lambda task_id: task_options[task_id],
+                key=f"goal_task_{goal['id']}",
+            )
+            if st.button("Связать задачу", key=f"link_goal_{goal['id']}"):
+                link_task_to_goal(selected_task_id, goal["id"])
+                st.rerun()
+        return
+
+    st.markdown(
+        "<div class='hero'><div><div class='eyebrow'>Большие ориентиры</div>"
+        "<h1>Цели.</h1>"
+        "<p>Связывайте ежедневные задачи с тем, к чему хотите прийти.</p></div></div>",
+        unsafe_allow_html=True,
+    )
+    with st.expander("Добавить цель", expanded=True):
+        version = st.session_state.get("new_goal_form_version", 0)
+        with st.form(f"new_goal_{version}"):
+            title = st.text_input("Название", max_chars=120)
+            description = st.text_area("Описание", max_chars=1000)
+            due_date = st.date_input("Дедлайн", value=date.today())
+            submitted = st.form_submit_button("Сохранить цель", type="primary")
+        if submitted:
+            if not title.strip():
+                st.error("Укажите название цели.")
+            else:
+                try:
+                    create_goal(title.strip(), description.strip(), due_date.isoformat())
+                except DatabaseError as error:
+                    st.error(str(error))
+                else:
+                    st.session_state.new_goal_form_version = version + 1
+                    st.rerun()
+    st.subheader("Активные цели")
+    active_goals = [goal for goal in goals if goal["status"] == "Active"]
+    if not active_goals:
+        st.info("Активных целей пока нет.")
+    for goal in active_goals:
+        progress = calculate_goal_progress(goal["id"])
+        linked_tasks = get_goal_tasks(goal["id"])
+        st.markdown(f"### {goal['title']}")
+        st.caption(f"{goal['description'] or 'Без описания'} · Дедлайн: {format_due_date(goal['due_date'])}")
+        st.progress(progress / 100, text=f"{progress}% · выполнено {sum(task['status'] == 'Done' for task in linked_tasks)} из {len(linked_tasks)} задач")
+        if st.button("Открыть цель", key=f"open_goal_{goal['id']}"):
+            st.session_state.selected_goal_id = goal["id"]
+            st.rerun()
+
+
 def render_task_management(tasks: list[dict]) -> None:
     st.markdown(
         "<div class='hero'><div><div class='eyebrow'>Организация дня</div>"
@@ -417,6 +516,7 @@ try:
     init_db()
     tasks = get_tasks()
     dashboard_stats = get_dashboard_stats()
+    goals = get_goals()
     habits = get_habits()
     recent_notes = get_recent_notes()
 except DatabaseError as error:
@@ -431,6 +531,9 @@ if page == "habits":
     st.stop()
 if page == "notes":
     render_notes_page(recent_notes)
+    st.stop()
+if page == "goals":
+    render_goals_page(goals, tasks)
     st.stop()
 if page == "tasks":
     render_task_management(tasks)
@@ -499,6 +602,16 @@ for column, (label, value, hint) in zip(stats_columns, stat_cards):
             f"<span class='metric'>{value}</span><small>{hint}</small></div>",
             unsafe_allow_html=True,
         )
+
+active_goals = [goal for goal in goals if goal["status"] == "Active"]
+if active_goals:
+    st.subheader("Активные цели")
+    goal_columns = st.columns(min(3, len(active_goals)))
+    for column, goal in zip(goal_columns, active_goals[:3]):
+        with column:
+            progress = calculate_goal_progress(goal["id"])
+            st.markdown(f"**{goal['title']}**")
+            st.progress(progress / 100, text=f"{progress}% · до {format_due_date(goal['due_date'])}")
 
 st.divider()
 st.subheader("Текущие задачи")
